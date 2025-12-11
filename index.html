@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Shoepe Wheel</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+  }
+  canvas {
+    display: block;
+    background: #000;
+  }
+</style>
+
+  </head>
+  <body>
+    <canvas id="canvas" width="940" height="720"
+        oncontextmenu="event.preventDefault()"></canvas>
+    <script src="tmi.min.js"></script>
+
+<script>
+  const channelName = 'shoepert';
+  const hostName    = 'shoepert';
+
+  const BASE_WIDTH  = 940;
+  const BASE_HEIGHT = 720;
+
+  function resizeCanvas() {
+    const canvas = document.getElementById('canvas');
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    const scale = Math.min(w / BASE_WIDTH, h / BASE_HEIGHT);
+    const displayWidth  = BASE_WIDTH * scale;
+    const displayHeight = BASE_HEIGHT * scale;
+
+    canvas.style.width  = displayWidth + 'px';
+    canvas.style.height = displayHeight + 'px';
+    canvas.style.position = 'absolute';
+    canvas.style.left = ((w - displayWidth) / 2) + 'px';
+    canvas.style.top  = ((h - displayHeight) / 2) + 'px';
+  }
+
+  window.addEventListener('load', resizeCanvas);
+  window.addEventListener('resize', resizeCanvas);
+
+  var Module = {
+    canvas: (function () {
+      return document.getElementById('canvas');
+    })(),
+    onRuntimeInitialized: function () {
+      console.log('WASM runtime initialized');
+      resizeCanvas();
+
+      if (typeof tmi === 'undefined') {
+        console.error('tmi.js not loaded');
+        return;
+      }
+
+      const wheelJoin     = Module.cwrap('wheel_join',      null, ['string']);
+      const wheelSpin     = Module.cwrap('wheel_spin',      null, []);
+      const wheelReset    = Module.cwrap('wheel_reset',     null, []);
+      const wheelSetHost  = Module.cwrap('wheel_set_host',  null, ['string','string']);
+
+      // Tell the C++ side who the host/channel are
+      wheelSetHost(hostName, '#' + channelName);
+
+      // Put host on the wheel immediately
+      wheelJoin(hostName);
+
+      const client = new tmi.Client({
+        connection: { reconnect: true, secure: true },
+        channels: ['#' + channelName]
+      });
+
+      client.connect().then(() => {
+        console.log('tmi.js connected to #' + channelName);
+      }).catch(err => {
+        console.error('tmi.js connect error:', err);
+      });
+
+      client.on('message', (channel, tags, message, self) => {
+        if (self) return;
+
+        const text  = message.trim();
+        const lower = text.toLowerCase();
+
+        if (lower.startsWith('!join')) {
+          const user = tags['display-name'] || tags.username || 'unknown';
+          console.log('JOIN from', user);
+          wheelJoin(user);
+        } else if (lower === '!spin') {
+          console.log('SPIN command');
+          wheelSpin();
+        } else if (lower === '!reset') {
+          console.log('RESET command');
+          wheelReset();   // C++ will clear and then re-add host via g_twitch_cfg.nick
+        }
+      });
+    }
+  };
+</script>
+<script src="wheel.js"></script>
+
+  </body>
+</html>

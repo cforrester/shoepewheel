@@ -1,0 +1,27 @@
+﻿{
+  "scene_start_area": "AREA_01",
+  "actions": {
+    "travel": 30,
+    "investigate": 5,
+    "talk": 120
+  },
+  "areas": [
+    {
+      "id": "AREA_01",
+      "display": "Old Harbor",
+      "rect": [ 60, 120, 300, 160 ]
+    },
+    {
+      "id": "AREA_02",
+      "display": "Night Market",
+      "rect": [ 420, 120, 300, 160 ],
+      "require_flag": "FLAG_PASS"
+    },
+    {
+      "id": "AREA_03",
+      "display": "Glass District",
+      "rect": [ 780, 120, 300, 160 ],
+      "forbid_flag": "FLAG_LOCKDOWN"
+    }
+  ]
+}

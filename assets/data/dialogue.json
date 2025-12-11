@@ -1,0 +1,125 @@
+{
+  "dialogue_map": {
+    "AREA_01": "DLG_HARBOR",
+    "AREA_02": "DLG_MARKET",
+    "AREA_03": "DLG_GLASS"
+  },
+  "dialogues": [
+    {
+      "id": "DLG_HARBOR",
+      "speaker": "HARBOR_GUARD",
+      "lines": [
+        "[ART_NPC_HARBOR_GUARD]",
+        "PLACEHOLDER: Guard watches the pier.",
+        "This is a long test line so you can see the typewriter effect clearly. Try changing Options → Typing speed.",
+        "Second long line to verify multi-line wrapping and reveal pacing.",
+        "Click once while typing to complete instantly; click again to proceed."
+      ],
+      "choices": [
+        {
+          "id": "ASK_PASS",
+          "label": "Ask about city pass",
+          "time_cost": 10,
+          "set_flag": "FLAG_PASS",
+          "next_dialogue": "DLG_HARBOR_AFTER"
+        },
+        {
+          "id": "SMALL_TALK",
+          "label": "Small talk",
+          "time_cost": 5
+        }
+      ]
+    },
+    {
+      "id": "DLG_HARBOR_AFTER",
+      "speaker": "HARBOR_GUARD",
+      "lines": [
+        "You have a temporary pass now.",
+        "The Night Market should be open."
+      ],
+      "choices": [
+        {
+          "id": "THANKS",
+          "label": "Thank the guard",
+          "time_cost": 1
+        }
+      ]
+    },
+    {
+      "id": "DLG_MARKET",
+      "speaker": "VENDOR",
+      "lines": [
+        "[ART_NPC_VENDOR]",
+        "PLACEHOLDER: Vendor eyes your badge."
+      ],
+      "choices": [
+        {
+          "id": "BUY_PILLS",
+          "label": "Buy painkiller (placeholder)",
+          "time_cost": 15,
+          "add_item": "PAINKILLER"
+        },
+        {
+          "id": "NEED_KEY",
+          "label": "Ask for keycard",
+          "time_cost": 20,
+          "set_flag": "FLAG_LOCKDOWN",
+          "next_dialogue": "DLG_MARKET_LOCK"
+        }
+      ]
+    },
+    {
+      "id": "DLG_MARKET_LOCK",
+      "speaker": "VENDOR",
+      "lines": [
+        "Lockdown rumor spreads."
+      ],
+      "choices": [
+        {
+          "id": "OK",
+          "label": "Leave",
+          "time_cost": 1
+        }
+      ]
+    },
+    {
+      "id": "DLG_GLASS",
+      "speaker": "OFFICER",
+      "lines": [
+        "[ART_NPC_OFFICER]",
+        "PLACEHOLDER: Officer at the Glass District."
+      ],
+      "choices": [
+        {
+          "id": "SHOW_PASS",
+          "label": "Show temporary keycard (requires item)",
+          "time_cost": 10,
+          "require_item": "KEYCARD_TEMP"
+        },
+        {
+          "id": "INQUIRE",
+          "label": "Inquire quietly",
+          "time_cost": 8,
+          "clear_flag": "FLAG_LOCKDOWN"
+        }
+      ]
+    },
+    {
+      "id": "DLG_TYPE_TEST",
+      "speaker": "TESTER",
+      "lines": [
+        "This is a long test line so you can see the typewriter effect clearly. Try changing Options → Typing speed.",
+        "Second long line to verify multi-line wrapping and reveal pacing.",
+        "Click once while typing to complete instantly; click again to proceed."
+      ],
+      "choices": [
+        {
+          "id": "OK",
+          "label": "OK",
+          "time_cost": 0
+        }
+      ]
+    }
+
+  ]
+}

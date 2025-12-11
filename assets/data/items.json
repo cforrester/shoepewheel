@@ -1,0 +1,21 @@
+﻿{
+  "items": [
+    {
+      "id": "ITEM_NOTE_01",
+      "display": "Crinkled Note",
+      "icon": "ICON",
+      "flags": [ "clue" ]
+    },
+    {
+      "id": "KEYCARD_TEMP",
+      "display": "Temporary Keycard",
+      "icon": "ICON"
+    },
+    {
+      "id": "PAINKILLER",
+      "display": "Painkiller",
+      "icon": "ICON",
+      "flags": [ "consumable" ]
+    }
+  ]
+}
