@@ -1463,6 +1463,20 @@ static void frame(const TwitchConfig& cfg, float dt)
         app.bg_waka_angle_deg -= 360.0f;
     else if (app.bg_waka_angle_deg < 0.0f)
         app.bg_waka_angle_deg += 360.0f;
+    // Keep the background offsets bounded so the waka sprites loop forever
+    int winW = 0, winH = 0;
+    SDL_GetRenderOutputSize(app.renderer, &winW, &winH);
+
+    if (winW > 0) {
+        app.bg_waka_offset_x = std::fmod(app.bg_waka_offset_x, static_cast<float>(winW));
+        if (app.bg_waka_offset_x < 0.0f)
+            app.bg_waka_offset_x += static_cast<float>(winW);
+    }
+    if (winH > 0) {
+        app.bg_waka_offset_y = std::fmod(app.bg_waka_offset_y, static_cast<float>(winH));
+        if (app.bg_waka_offset_y < 0.0f)
+            app.bg_waka_offset_y += static_cast<float>(winH);
+    }
 
     // ---- Winner flashing state ----
     bool winner_flash_on = false;
