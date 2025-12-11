@@ -58,21 +58,19 @@
     onRuntimeInitialized: function () {
       console.log('WASM runtime initialized');
       resizeCanvas();
-
+      
       if (typeof tmi === 'undefined') {
         console.error('tmi.js not loaded');
         return;
       }
 
+      // TODO: track previous spins in here somewhere?
       const wheelJoin     = Module.cwrap('wheel_join',      null, ['string']);
       const wheelSpin     = Module.cwrap('wheel_spin',      null, []);
       const wheelReset    = Module.cwrap('wheel_reset',     null, []);
       const wheelSetHost  = Module.cwrap('wheel_set_host',  null, ['string','string']);
 
-      // Tell the C++ side who the host/channel are
       wheelSetHost(hostName, '#' + channelName);
-
-      // Put host on the wheel immediately
       wheelJoin(hostName);
 
       const client = new tmi.Client({
@@ -101,7 +99,7 @@
           wheelSpin();
         } else if (lower === '!reset') {
           console.log('RESET command');
-          wheelReset();   // C++ will clear and then re-add host via g_twitch_cfg.nick
+          wheelReset();
         }
       });
     }
