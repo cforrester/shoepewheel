@@ -46,6 +46,9 @@
 // Path to a TTF font (relative to the executable, or absolute)
 // Adjust this if needed.
 static const char* FONT_PATH = "assets/fonts/WheelLabel.ttf";
+static const char* LIST_FONT_PATH = "assets/fonts/ListLabel.otf";
+
+static constexpr float NAME_PANEL_WIDTH_FRAC = 0.28f; // 28% of window width
 
 
 static constexpr float WAKA_PIVOT_X = 0.57f;
@@ -65,6 +68,7 @@ struct AppState {
     SDL_Renderer* renderer = nullptr;
     TTF_Font* font = nullptr;
     TTF_Font* status_font = nullptr;  // smaller status font
+    TTF_Font* list_font = nullptr;  // list font
     SDL_Texture* waka_texture = nullptr;
     int waka_w = 0;
     int waka_h = 0;
@@ -263,7 +267,43 @@ static void render_text_centered(SDL_Renderer* renderer,
     SDL_Color color,
     float x, float y);
 
-// "Sonic-like" dramatic bar + letter reveal (no shake, semi-transparent dark bg)
+static void render_text_left(SDL_Renderer* renderer,
+                             TTF_Font* font,
+                             const std::string& text,
+                             SDL_Color color,
+                             float x,
+                             float y)
+{
+    if (!renderer || !font) return;
+    if (text.empty()) return;
+
+    SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), 0, color);
+    if (!surface) {
+        std::cerr << "TTF_RenderText_Blended (left) failed: "
+                  << SDL_GetError() << "\n";
+        return;
+    }
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (!texture) {
+        std::cerr << "SDL_CreateTextureFromSurface (left) failed: "
+                  << SDL_GetError() << "\n";
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    SDL_FRect dst{};
+    dst.w = static_cast<float>(surface->w);
+    dst.h = static_cast<float>(surface->h);
+    dst.x = x;
+    dst.y = y;
+
+    SDL_DestroySurface(surface);
+
+    SDL_RenderTexture(renderer, texture, nullptr, &dst);
+    SDL_DestroyTexture(texture);
+}
+
 static void draw_winner_banner(SDL_Renderer* renderer,
     TTF_Font* font,
     const std::string& name,
@@ -966,9 +1006,16 @@ static void draw_wheel(SDL_Renderer* renderer,
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(renderer, &w, &h);
 
-    float cx = w * 0.5f;
-    float cy = h * 0.5f;
-    float radius = std::min(w, h) * 0.45f;
+float listWidth   = static_cast<float>(w) * NAME_PANEL_WIDTH_FRAC;
+float wheelAreaW  = static_cast<float>(w) - listWidth;
+if (wheelAreaW < 0.0f) {
+    wheelAreaW = static_cast<float>(w); // fallback
+}
+
+// Wheel is centered in the left area
+float cx = wheelAreaW * 0.5f;
+float cy = static_cast<float>(h) * 0.5f;
+float radius = std::min(wheelAreaW, static_cast<float>(h)) * 0.45f;
 
     int n = static_cast<int>(entries.size());
     const float TWO_PI = 2.0f * 3.14159265358979323846f;
@@ -1127,6 +1174,95 @@ static void draw_wheel(SDL_Renderer* renderer,
     }
 }
 
+static void draw_name_list(SDL_Renderer* renderer,
+                           TTF_Font* font,
+                           const std::vector<WheelEntry>& entries,
+                           int active_index,
+                           int winner_index)
+{
+    if (!renderer || !font) return;
+
+    int winW = 0, winH = 0;
+    SDL_GetRenderOutputSize(renderer, &winW, &winH);
+
+    float winWF = static_cast<float>(winW);
+    float winHF = static_cast<float>(winH);
+
+    // Panel on the right side of the window, inset ~10px from the edge
+    float panelWidth       = winWF * NAME_PANEL_WIDTH_FRAC;
+    float panelMarginRight = 10.0f;               // gap from right edge
+    float panelX           = winWF - panelWidth - panelMarginRight;
+
+    // Panel is ~60% of the window height and vertically centered
+    float panelHeightFrac  = 0.6f;                // 60% of window height
+    float panelH           = winHF * panelHeightFrac;
+    float panelY           = (winHF - panelH) * 0.5f;
+
+    SDL_FRect panelRect{ panelX, panelY, panelWidth, panelH };
+
+    // Fill panel with white
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderFillRect(renderer, &panelRect);
+
+    // Thin black border
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderRect(renderer, &panelRect);
+
+    // Text layout inside the panel
+    float paddingX = 10.0f;
+    float paddingY = 10.0f;
+
+    float contentX = panelX + paddingX;
+    float contentY = panelY + paddingY;
+    float contentW = panelWidth - 2.0f * paddingX;
+    float contentH = panelH   - 2.0f * paddingY;
+
+    int   lineSkip = TTF_GetFontLineSkip(font);
+    float lineStep = static_cast<float>(lineSkip);
+
+    int maxRows = static_cast<int>(contentH / lineStep);
+    if (maxRows <= 0) return;
+
+    // Two columns: total visible slots
+    const int numColumns = 2;
+    int maxVisible = maxRows * numColumns;
+    if (maxVisible <= 0) return;
+
+    int total = static_cast<int>(entries.size());
+    int startIndex = 0;
+
+    // If there are more names than fit, show the most recent ones
+    if (total > maxVisible) {
+        startIndex = total - maxVisible;
+    }
+
+    // Horizontal layout for two columns
+    float columnGap = 20.0f; // space between columns
+    float colWidth  = (contentW - columnGap) * 0.5f;
+
+    float colX[2];
+    colX[0] = contentX;
+    colX[1] = contentX + colWidth + columnGap;
+
+    SDL_Color textCol{ 0, 0, 0, 255 };
+
+    // Draw up to maxVisible entries across two columns
+    for (int idx = 0; idx < maxVisible && (startIndex + idx) < total; ++idx) {
+        int i = startIndex + idx;
+
+        int col = idx / maxRows;      // 0 or 1
+        int row = idx % maxRows;      // 0 .. maxRows-1
+
+        if (col >= numColumns)
+            break;
+
+        float x = colX[col];
+        float y = contentY + row * lineStep;
+
+        const auto& e = entries[i];
+        render_text_left(renderer, font, e.name, textCol, x, y);
+    }
+}
 
 
 static void draw_filled_triangle(SDL_Renderer* renderer,
@@ -1360,7 +1496,10 @@ static void frame(const TwitchConfig& cfg, float dt)
     }
 
     int n = static_cast<int>(entriesCopy.size());
-
+int activeIndex = -1;
+if (app.spinning && n > 0) {
+    activeIndex = pointer_slice_index(app.current_angle, n);
+}
 
     if (!app.authorized) {
         if (!app.renderer) {
@@ -1451,8 +1590,8 @@ static void frame(const TwitchConfig& cfg, float dt)
     }
 
     // ---- Background waka drift / rotation ----
-    const float bgSpeed  = 50.0f;   // was 30.0f
-    const float rotSpeed = 20.0f;   // was 10.0f (degrees per second)
+    const float bgSpeed  = 60.0f;   // was 30.0f
+    const float rotSpeed = 30.0f;   // was 10.0f (degrees per second)
 
 
     app.bg_waka_offset_x += bgSpeed * 0.6f * dt;
@@ -1526,8 +1665,13 @@ static void frame(const TwitchConfig& cfg, float dt)
         app.waka_w,
         app.waka_h);
 
+    draw_name_list(app.renderer,
+               app.list_font,
+               entriesCopy,
+               activeIndex,
+               app.winner_index);
     // Status text / help
-    if (app.status_font) {
+    if (app.list_font) {
         int winW = 0, winH = 0;
         SDL_GetRenderOutputSize(app.renderer, &winW, &winH);
 
@@ -1540,22 +1684,12 @@ static void frame(const TwitchConfig& cfg, float dt)
 #endif
 
         render_text_centered(app.renderer,
-            app.status_font,
+            app.list_font,
             status,
             statusColor,
             winW * 0.5f,
             winH * 0.07f);
 
-        if (!cfg.channel.empty()) {
-            std::string chan = "";
-            SDL_Color chanColor{ 220, 220, 220, 255 };
-            render_text_centered(app.renderer,
-                app.status_font,
-                chan,
-                chanColor,
-                winW * 0.5f,
-                winH * 0.12f);
-        }
     }
 
     // Winner banner overlay
@@ -1567,7 +1701,7 @@ static void frame(const TwitchConfig& cfg, float dt)
             app.celebration_time);
     }
 
-        // Hold-to-reset message in lower-right corner
+
     // Hold-to-reset message in lower-right corner
     if (app.reset_hold_active && (app.status_font || app.font)) {
         int winW = 0, winH = 0;
@@ -1771,6 +1905,11 @@ int main(int /*argc*/, char** /*argv*/) {
         TTF_SetFontHinting(app.status_font, TTF_HINTING_LIGHT);
     }
 
+    app.list_font = TTF_OpenFont(LIST_FONT_PATH, 15.0f);
+    if (app.list_font) {
+        TTF_SetFontHinting(app.list_font, TTF_HINTING_LIGHT);
+    }
+
     int windowWidth = 940;
     int windowHeight = 720;
 
@@ -1805,6 +1944,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
 
     // Hardcoded test entries so you can see the wheel without Twitch
+    /*
     {
         std::lock_guard<std::mutex> lock(app.entries_mutex);
 
@@ -1828,8 +1968,9 @@ int main(int /*argc*/, char** /*argv*/) {
         for (const char* n : names) {
             app.entries.push_back(WheelEntry{ n, random_color() });
         }
+            
     }
-
+*/
 
     
     TwitchConfig& cfg = g_twitch_cfg;
