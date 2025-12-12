@@ -54,6 +54,9 @@ static constexpr float NAME_PANEL_WIDTH_FRAC = 0.28f; // 28% of window width
 static constexpr float WAKA_PIVOT_X = 0.57f;
 static constexpr float WAKA_PIVOT_Y = 0.55f;
 
+static constexpr float CONTENT_Y_OFFSET = 25.0f; // vertical offset for wheel + name list
+
+
 // ----------------------
 // Types
 // ----------------------
@@ -97,7 +100,8 @@ struct AppState {
     bool  reset_hold_active = false;  // true while user is holding to reset
     float reset_hold_elapsed = 0.0f;  // seconds since hold began
     int   reset_hold_source = 0;      // 0 = none, 1 = space, 2 = mouse
-    bool  authorized = false; 
+    bool  authorized = false;
+    std::atomic<bool> join_open{ false };
 };
 
 AppState app;
@@ -544,10 +548,15 @@ static void handle_irc_line(const std::string& line,
     std::string lower = to_lower(message);
 
     if (lower.rfind("!join", 0) == 0) {
-       add_player_if_new(username, entries, entries_mutex);
+        if (app.join_open.load()) {
+            add_player_if_new(username, entries, entries_mutex);
+        } else {
+            std::cout << "[Twitch] Ignoring !join from " << username
+                      << " (wheel closed)\n";
+        }
     }
-
 }
+
 
 // connect to Twitch IRC and watch for "!join"
 static void twitch_chat_thread(TwitchConfig cfg,
@@ -688,11 +697,15 @@ static void handle_spin_or_reset(AppState& app, const TwitchConfig& cfg)
             // Clear all players from the wheel so chat can !join again
             app.entries.clear();
 
+            // Return to CLOSED state
+            app.join_open.store(false);
+
+
             didReset = true;
             std::cout << "[Wheel] Reset for next round.\n";
         }
         // Otherwise, if not spinning and we have players, start a new spin
-        else if (app.entries.size() >= 2 && !app.spinning) {
+        else if (app.entries.size() >= 2 && !app.spinning && !app.join_open.load()) {
             app.spinning = true;
             app.winner_index = -1;
             app.winner_flash_remaining = 0.0f;
@@ -1014,7 +1027,7 @@ if (wheelAreaW < 0.0f) {
 
 // Wheel is centered in the left area
 float cx = wheelAreaW * 0.5f;
-float cy = static_cast<float>(h) * 0.5f;
+float cy = static_cast<float>(h) * 0.5f + CONTENT_Y_OFFSET;
 float radius = std::min(wheelAreaW, static_cast<float>(h)) * 0.45f;
 
     int n = static_cast<int>(entries.size());
@@ -1196,7 +1209,7 @@ static void draw_name_list(SDL_Renderer* renderer,
     // Panel is ~60% of the window height and vertically centered
     float panelHeightFrac  = 0.6f;                // 60% of window height
     float panelH           = winHF * panelHeightFrac;
-    float panelY           = (winHF - panelH) * 0.5f;
+    float panelY           = (winHF - panelH) * 0.5f + CONTENT_Y_OFFSET;
 
     SDL_FRect panelRect{ panelX, panelY, panelWidth, panelH };
 
@@ -1670,27 +1683,92 @@ if (app.spinning && n > 0) {
                entriesCopy,
                activeIndex,
                app.winner_index);
-    // Status text / help
-    if (app.list_font) {
-        int winW = 0, winH = 0;
-        SDL_GetRenderOutputSize(app.renderer, &winW, &winH);
+     // Status text / help: top-center rounded container
+    {
+        // Prefer status_font, fall back to list_font if needed
+        TTF_Font* f = app.status_font ? app.status_font : app.list_font;
+        if (f && app.renderer) {
+            int winW = 0, winH = 0;
+            SDL_GetRenderOutputSize(app.renderer, &winW, &winH);
 
-        SDL_Color statusColor{ 255, 255, 255, 255 };
+            bool isOpen = app.join_open.load();
 
-#ifndef __EMSCRIPTEN__
-        std::string status = "";
-#else
-        std::string status = "";
-#endif
+            std::string statusText = isOpen
+                ? "Type !join in chat to join the Wheel"
+                : "Wheel is now closed";
 
-        render_text_centered(app.renderer,
-            app.list_font,
-            status,
-            statusColor,
-            winW * 0.5f,
-            winH * 0.07f);
+            SDL_Color textColor = isOpen
+                ? SDL_Color{ 103, 127,  56, 255 }   // dark green (from reference image)
+                : SDL_Color{  15,  62, 139, 255 };  // dark blue (from reference image)
 
+            // Different background hint for open vs closed
+            SDL_Color fillColor = isOpen
+                ? SDL_Color{ 210, 231, 221, 255 }  // light green (from reference image)
+                : SDL_Color{ 206, 226, 255, 255 }; // light blue (from reference image)
+
+            SDL_Color borderColor{ 0, 0, 0, 255 };
+
+            SDL_Surface* surface =
+                TTF_RenderText_Blended(f, statusText.c_str(), 0, textColor);
+            if (surface) {
+                SDL_Texture* texture =
+                    SDL_CreateTextureFromSurface(app.renderer, surface);
+                if (texture) {
+                    float textW = static_cast<float>(surface->w);
+                    float textH = static_cast<float>(surface->h);
+
+                    // Padding around text inside the card
+                    float paddingX = 18.0f;
+                    float paddingY = 8.0f;
+
+                    float cardW = textW + paddingX * 2.0f;
+                    float cardH = textH + paddingY * 2.0f;
+
+                    // Centered horizontally, near the top (same Y as before)
+                    float centerX = winW * 0.5f;
+                    float centerY = winH * 0.07f;
+
+                    float cardX = centerX - cardW * 0.5f;
+                    float cardY = centerY - cardH * 0.5f;
+
+                    float outerRadius      = 12.0f;
+                    float innerRadius      = 10.0f;
+                    float borderThickness  = 2.0f;
+
+                    // Outer border
+                    draw_filled_rounded_rect(app.renderer,
+                        cardX,
+                        cardY,
+                        cardW,
+                        cardH,
+                        outerRadius,
+                        borderColor);
+
+                    // Inner fill
+                    draw_filled_rounded_rect(app.renderer,
+                        cardX + borderThickness,
+                        cardY + borderThickness,
+                        cardW - borderThickness * 2.0f,
+                        cardH - borderThickness * 2.0f,
+                        innerRadius,
+                        fillColor);
+
+                    // Render text inside
+                    SDL_FRect dst{};
+                    dst.w = textW;
+                    dst.h = textH;
+                    dst.x = cardX + paddingX;
+                    dst.y = cardY + paddingY;
+
+                    SDL_RenderTexture(app.renderer, texture, nullptr, &dst);
+
+                    SDL_DestroyTexture(texture);
+                }
+                SDL_DestroySurface(surface);
+            }
+        }
     }
+
 
     // Winner banner overlay
     if (app.celebration_active && !app.celebration_name.empty()) {
@@ -1808,7 +1886,9 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
         void wheel_join(const char* user) {
         if (!user || !user[0]) return;
-        add_player_if_new(user, app.entries, app.entries_mutex);
+        if (app.join_open.load()) {
+            add_player_if_new(user, app.entries, app.entries_mutex);
+        }
     }
 
     
@@ -1829,6 +1909,7 @@ extern "C" {
                 // Clear wheel + winner state
                 std::lock_guard<std::mutex> lock(app.entries_mutex);
                 app.entries.clear();
+                app.join_open.store(false); // CLOSED
                 app.spinning = false;
                 app.angular_velocity = 0.0f;
                 app.winner_index = -1;
@@ -1848,6 +1929,9 @@ extern "C" {
         std::lock_guard<std::mutex> lock(app.entries_mutex);
 
         if (app.entries.size() < 2 || app.spinning) return;
+
+        if (app.join_open.load()) return; // cannot spin while OPEN
+
 
         app.spinning = true;
         app.winner_index = -1;
@@ -1944,7 +2028,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
 
     // Hardcoded test entries so you can see the wheel without Twitch
-    /*
+    
     {
         std::lock_guard<std::mutex> lock(app.entries_mutex);
 
@@ -1970,7 +2054,7 @@ int main(int /*argc*/, char** /*argv*/) {
         }
             
     }
-*/
+
 
     
     TwitchConfig& cfg = g_twitch_cfg;
@@ -2018,17 +2102,22 @@ int main(int /*argc*/, char** /*argv*/) {
                 }
                 else if (e.type == SDL_EVENT_KEY_DOWN) {
                     if (e.key.key == SDLK_SPACE) {
-                        bool winnerShowing =
-                            (app.celebration_active || app.winner_index >= 0);
-
-                        if (winnerShowing) {
-                            if (!app.reset_hold_active) {
-                                app.reset_hold_active  = true;
-                                app.reset_hold_elapsed = 0.0f;
-                                app.reset_hold_source  = 1; // space
-                            }
+                        bool isOpen = app.join_open.load();
+                        if (isOpen) {
+                            // When OPEN, ignore spin/reset input.
                         } else {
-                            handle_spin_or_reset(app, *cfg);
+                            bool winnerShowing =
+                                (app.celebration_active || app.winner_index >= 0);
+
+                            if (winnerShowing) {
+                                if (!app.reset_hold_active) {
+                                    app.reset_hold_active  = true;
+                                    app.reset_hold_elapsed = 0.0f;
+                                    app.reset_hold_source  = 1; // space
+                                }
+                            } else {
+                                handle_spin_or_reset(app, *cfg);
+                            }
                         }
                     }
                 }
@@ -2040,22 +2129,42 @@ int main(int /*argc*/, char** /*argv*/) {
                         app.reset_hold_source  = 0;
                     }
                 }
-                else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                    if (e.button.button == SDL_BUTTON_LEFT) {
-                        bool winnerShowing =
-                            (app.celebration_active || app.winner_index >= 0);
+else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+    if (e.button.button == SDL_BUTTON_LEFT) {
+        bool isOpen = app.join_open.load();
+        bool winnerShowing =
+            (app.celebration_active || app.winner_index >= 0);
 
-                        if (winnerShowing) {
-                            if (!app.reset_hold_active) {
-                                app.reset_hold_active  = true;
-                                app.reset_hold_elapsed = 0.0f;
-                                app.reset_hold_source  = 2; // mouse
-                            }
-                        } else {
-                            handle_spin_or_reset(app, *cfg);
-                        }
-                    }
-                }
+        if (isOpen) {
+            // When OPEN, left-click is disabled (no spin, no reset-hold).
+        } else if (winnerShowing) {
+            // After a winner is selected, hold left mouse to reset.
+            if (!app.reset_hold_active) {
+                app.reset_hold_active  = true;
+                app.reset_hold_elapsed = 0.0f;
+                app.reset_hold_source  = 2; // mouse
+            }
+        } else {
+            // CLOSED: left-click starts a spin.
+            handle_spin_or_reset(app, *cfg);
+        }
+    }
+    else if (e.button.button == SDL_BUTTON_RIGHT) {
+        bool winnerShowing =
+            (app.celebration_active || app.winner_index >= 0);
+
+        if (winnerShowing) {
+            // After a winner is selected, right-click open/close toggle is disabled.
+            std::cout << "[Wheel] Join toggle ignored (winner selected)\n";
+        } else {
+            bool current = app.join_open.load();
+            app.join_open.store(!current);
+            std::cout << "[Wheel] Join state toggled to "
+                      << (app.join_open.load() ? "OPEN" : "CLOSED") << "\n";
+        }
+    }
+}
+
                 else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                     if (e.button.button == SDL_BUTTON_LEFT &&
                         app.reset_hold_source == 2) {
@@ -2115,23 +2224,30 @@ int main(int /*argc*/, char** /*argv*/) {
                     app.reset_hold_source  = 0;
                 }
             }
-            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                if (e.button.button == SDL_BUTTON_LEFT) {
-                    bool winnerShowing =
-                        (app.celebration_active || app.winner_index >= 0);
+else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+    if (e.button.button == SDL_BUTTON_LEFT) {
+        bool winnerShowing =
+            (app.celebration_active || app.winner_index >= 0);
 
-                    if (winnerShowing) {
-                        if (!app.reset_hold_active) {
-                            app.reset_hold_active  = true;
-                            app.reset_hold_elapsed = 0.0f;
-                            app.reset_hold_source  = 2; // mouse
-                        }
-                    } else {
-                        // Normal behavior: spin / reset as before
-                        handle_spin_or_reset(app, cfg);
-                    }
-                }
+        if (winnerShowing) {
+            if (!app.reset_hold_active) {
+                app.reset_hold_active  = true;
+                app.reset_hold_elapsed = 0.0f;
+                app.reset_hold_source  = 2; // mouse
             }
+        } else {
+            // Normal behavior: spin / reset as before
+            handle_spin_or_reset(app, cfg);
+        }
+    }
+    else if (e.button.button == SDL_BUTTON_RIGHT) {
+        bool current = app.join_open.load();
+        app.join_open.store(!current);
+        std::cout << "[Wheel] Join state toggled to "
+                  << (app.join_open.load() ? "OPEN" : "CLOSED") << "\n";
+    }
+}
+
             else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                 if (e.button.button == SDL_BUTTON_LEFT &&
                     app.reset_hold_source == 2) {
