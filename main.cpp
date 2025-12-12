@@ -1886,7 +1886,7 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
         void wheel_join(const char* user) {
         if (!user || !user[0]) return;
-        if (app.join_open.load()) {
+        if (app.join_open.load() || (app.entries.empty() && g_twitch_cfg.nick == user)) {
             add_player_if_new(user, app.entries, app.entries_mutex);
         }
     }
