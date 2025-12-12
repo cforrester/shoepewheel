@@ -2028,7 +2028,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
 
     // Hardcoded test entries so you can see the wheel without Twitch
-    
+  /*
     {
         std::lock_guard<std::mutex> lock(app.entries_mutex);
 
@@ -2054,7 +2054,7 @@ int main(int /*argc*/, char** /*argv*/) {
         }
             
     }
-
+*/  
 
     
     TwitchConfig& cfg = g_twitch_cfg;
