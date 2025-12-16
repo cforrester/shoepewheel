@@ -855,6 +855,15 @@ static void render_text_radial(SDL_Renderer* renderer,
 // Wheel rendering helpers
 // ----------------------
 
+void SetIcon(SDL_Window* win)
+{
+    SDL_Surface* icon = IMG_Load("assets/icon.png");  // PNG is typical
+    if (icon) {
+        SDL_SetWindowIcon(win, icon);
+        SDL_DestroySurface(icon);
+    }
+}
+
 static void draw_filled_sector(SDL_Renderer* renderer,
     float cx, float cy,
     float radius,
@@ -913,67 +922,7 @@ static void draw_circle_outline(SDL_Renderer* renderer,
     }
 }
 
-// -----------------------
-// Timer rendering helpers
-// -----------------------
 
-// Rounded rectangle fill using our sector helper for the corners
-static void draw_filled_rounded_rect(SDL_Renderer* renderer,
-    float x, float y,
-    float w, float h,
-    float radius,
-    SDL_Color color)
-{
-    if (!renderer) return;
-
-    if (radius < 0.0f) radius = 0.0f;
-    if (radius > w * 0.5f) radius = w * 0.5f;
-    if (radius > h * 0.5f) radius = h * 0.5f;
-
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-
-    // Center and side rectangles
-    SDL_FRect centerRect{ x + radius, y, w - 2.0f * radius, h };
-    SDL_RenderFillRect(renderer, &centerRect);
-
-    SDL_FRect leftRect{ x, y + radius, radius, h - 2.0f * radius };
-    SDL_RenderFillRect(renderer, &leftRect);
-
-    SDL_FRect rightRect{ x + w - radius, y + radius, radius, h - 2.0f * radius };
-    SDL_RenderFillRect(renderer, &rightRect);
-
-    const float PI = 3.14159265358979323846f;
-
-    // Four quarter-circle corners using the existing draw_filled_sector helper
-    // top-left
-    draw_filled_sector(renderer,
-        x + radius, y + radius,
-        radius,
-        PI, PI * 1.5f,
-        color);
-    // top-right
-    draw_filled_sector(renderer,
-        x + w - radius, y + radius,
-        radius,
-        PI * 1.5f, PI * 2.0f,
-        color);
-    // bottom-right
-    draw_filled_sector(renderer,
-        x + w - radius, y + h - radius,
-        radius,
-        0.0f, PI * 0.5f,
-        color);
-    // bottom-left
-    draw_filled_sector(renderer,
-        x + radius, y + h - radius,
-        radius,
-        PI * 0.5f, PI,
-        color);
-}
-
-// Draw a single 7-segment digit in a rect [x,y,w,h]
-// Draw a single 7-segment digit in a rect [x,y,w,h]
-// Draw a single 7-segment digit in a rect [x,y,w,h]
 
 
 static int pointer_slice_index(float current_angle, int n)
@@ -1514,33 +1463,7 @@ if (app.spinning && n > 0) {
     activeIndex = pointer_slice_index(app.current_angle, n);
 }
 
-    if (!app.authorized) {
-        if (!app.renderer) {
-            return;
-        }
-
-        SDL_SetRenderDrawColor(app.renderer, 0, 0, 0, 255);
-        SDL_RenderClear(app.renderer);
-
-        TTF_Font* f = app.status_font ? app.status_font : app.font;
-        if (f) {
-            int winW = 0, winH = 0;
-            SDL_GetRenderOutputSize(app.renderer, &winW, &winH);
-
-            SDL_Color white{ 255, 255, 255, 255 };
-            std::string msg = "This channel is not authorized to use this program";
-
-            render_text_centered(app.renderer,
-                                 f,
-                                 msg,
-                                 white,
-                                 winW * 0.5f,
-                                 winH * 0.5f);
-        }
-
-        SDL_RenderPresent(app.renderer);
-        return; // skip wheel, background, banner, etc.
-    }
+  
 
     if (app.reset_hold_active) {
         // If for some reason the winner is gone, cancel the hold
@@ -1604,7 +1527,7 @@ if (app.spinning && n > 0) {
 
     // ---- Background waka drift / rotation ----
     const float bgSpeed  = 60.0f;   // was 30.0f
-    const float rotSpeed = 30.0f;   // was 10.0f (degrees per second)
+    const float rotSpeed = 60.0f;   // was 10.0f (degrees per second)
 
 
     app.bg_waka_offset_x += bgSpeed * 0.6f * dt;
@@ -1956,6 +1879,13 @@ extern "C" {
 
 int main(int /*argc*/, char** /*argv*/) {
 
+#ifdef _WIN32
+    // Use the icon embedded in the .exe via your .rc file
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "101");
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "101");
+#endif
+
+    SDL_SetRenderVSync(app.renderer, 1);
 
 // SDL3: returns true on success, false on failure
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -2054,7 +1984,7 @@ int main(int /*argc*/, char** /*argv*/) {
         }
             
     }
-*/  
+  */
 
     
     TwitchConfig& cfg = g_twitch_cfg;
@@ -2264,7 +2194,7 @@ else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         lastTicks = now;
 
         frame(cfg, dt);
-        SDL_Delay(10);
+        
     }
 
 #endif
