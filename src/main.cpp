@@ -923,6 +923,67 @@ static void draw_circle_outline(SDL_Renderer* renderer,
 }
 
 
+// -----------------------
+// Timer rendering helpers
+// -----------------------
+
+// Rounded rectangle fill using our sector helper for the corners
+static void draw_filled_rounded_rect(SDL_Renderer* renderer,
+    float x, float y,
+    float w, float h,
+    float radius,
+    SDL_Color color)
+{
+    if (!renderer) return;
+
+    if (radius < 0.0f) radius = 0.0f;
+    if (radius > w * 0.5f) radius = w * 0.5f;
+    if (radius > h * 0.5f) radius = h * 0.5f;
+
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+
+    // Center and side rectangles
+    SDL_FRect centerRect{ x + radius, y, w - 2.0f * radius, h };
+    SDL_RenderFillRect(renderer, &centerRect);
+
+    SDL_FRect leftRect{ x, y + radius, radius, h - 2.0f * radius };
+    SDL_RenderFillRect(renderer, &leftRect);
+
+    SDL_FRect rightRect{ x + w - radius, y + radius, radius, h - 2.0f * radius };
+    SDL_RenderFillRect(renderer, &rightRect);
+
+    const float PI = 3.14159265358979323846f;
+
+    // Four quarter-circle corners using the existing draw_filled_sector helper
+    // top-left
+    draw_filled_sector(renderer,
+        x + radius, y + radius,
+        radius,
+        PI, PI * 1.5f,
+        color);
+    // top-right
+    draw_filled_sector(renderer,
+        x + w - radius, y + radius,
+        radius,
+        PI * 1.5f, PI * 2.0f,
+        color);
+    // bottom-right
+    draw_filled_sector(renderer,
+        x + w - radius, y + h - radius,
+        radius,
+        0.0f, PI * 0.5f,
+        color);
+    // bottom-left
+    draw_filled_sector(renderer,
+        x + radius, y + h - radius,
+        radius,
+        PI * 0.5f, PI,
+        color);
+}
+
+// Draw a single 7-segment digit in a rect [x,y,w,h]
+// Draw a single 7-segment digit in a rect [x,y,w,h]
+// Draw a single 7-segment digit in a rect [x,y,w,h]
 
 
 static int pointer_slice_index(float current_angle, int n)
