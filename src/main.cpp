@@ -1,4 +1,4 @@
-﻿// main.cpp
+// main.cpp
 //
 // SDL3 "Wheel of Names" with Twitch chat integration (Windows-only sample)
 //
@@ -102,6 +102,8 @@ struct AppState {
     int   reset_hold_source = 0;      // 0 = none, 1 = space, 2 = mouse
     bool  authorized = false;
     std::atomic<bool> join_open{ false };
+    TTF_Font* timer_font = nullptr;
+    TimerState timer;
 };
 
 AppState app;
@@ -724,6 +726,23 @@ static void handle_spin_or_reset(AppState& app, const TwitchConfig& cfg)
     // After reset, automatically add the channel owner as if they had joined
     if (didReset && !cfg.nick.empty()) {
         add_player_if_new(cfg.nick, app.entries, app.entries_mutex);
+    }
+}
+
+
+static void set_join_open(AppState& a, bool open)
+{
+    bool wasOpen = a.join_open.load(std::memory_order_relaxed);
+    if (wasOpen == open) return;
+
+    a.join_open.store(open, std::memory_order_relaxed);
+
+    if (open) {
+        timer_reset(a, TIMER_START_SECONDS); // 60
+        timer_start(a);
+    }
+    else {
+        timer_stop(a);
     }
 }
 
